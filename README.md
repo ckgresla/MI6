@@ -4,6 +4,7 @@ A pocket-repo for RL stuff; Algorithms, pre-trained Agents and Pointers to infor
 
 
 ## Info
+Directory Structure
 - "algorithms" contains PyTorch Implementations of each method (ideally importable and well commented, with useful helpers like saving weights)
 - "agents" contains saved model weights for Environments 
   - Save New Weights/Controllers as roughly: "{ENV_NAME}-{ALGORITHM}-{STEPS}"
@@ -11,7 +12,7 @@ A pocket-repo for RL stuff; Algorithms, pre-trained Agents and Pointers to infor
 
 
 ## Enviroment
-running the following is a lightweight way to build the python Environment required to run all of the code in this repo (w Jupyter stuff)
+Mainly working with Torch & Gym through Conda install, but see following for full reqs install w pip:
 - `pip install -r housekeeping/requirements.txt` -- on CPU
 - `pip install -r housekeeping/requirements-gpu.txt` -- on GPU (check your cuda!)
 
