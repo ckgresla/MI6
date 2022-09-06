@@ -11,8 +11,8 @@ A pocket-repo for RL stuff; Algorithms, pre-trained Agents and Pointers to infor
 
 # Enviroment
 running the following is a lightweight way to build the python Environment required to run all of the code in this repo (w Jupyter stuff)
-`pip install -r housekeeping/requirements.txt` -- on CPU
-`pip install -r housekeeping/requirements-gpu.txt` -- on GPU (check your cuda!)
+- `pip install -r housekeeping/requirements.txt` -- on CPU
+- `pip install -r housekeeping/requirements-gpu.txt` -- on GPU (check your cuda!)
 
 
 # Links + Resources
