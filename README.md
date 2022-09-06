@@ -10,7 +10,7 @@ Directory Structure
   - Save New Weights/Controllers as roughly: "{ENV_NAME}-{ALGORITHM}-{STEPS}"
 - "housekeeping" has all of the items for... housekeeping (requirements.txt for env replication, etc.)
 
-  
+
 ## Setup
 Mainly working with Torch & Gym through Conda install, but see following for full reqs install w pip:
 - `pip install -r housekeeping/requirements.txt` -- on CPU
