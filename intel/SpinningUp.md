@@ -19,6 +19,7 @@ some notes from the documentation over at- https://spinningup.openai.com/en/late
 
 
 
+
 ## Specific Concepts
 States & Observations
 - States are *complete* descriptions of the World
@@ -39,8 +40,8 @@ Action Spaces
 Policies
 - A Policy is a rule used by an Agent to decide what Actions to take, these Policies (figuring out what action to take given state) are either; *Deterministic* or *Stochastic* -- that means they are either real-valued (given states) or probabilistic (conditioned on the state given)
 - The Policy is basically the Brain of the Agent and because the Policy is what determines the Actions to be taken it is appropriate to say something like: "The policy is attempting to maximize reward" where "policy" is interchangable with "Agent"
-- These Policies in Deep RL are Parameterized Policies (Neural Networks or Models with Parameters/Weights that can be learned) -- Computable Functions that have parameters which we can adjust to update or change the behavior of the Agent (parameters of a Policy are typically denoted with the Greek Theta (θ) or phi (Φ) characters)
-- Deterministic Policies: basically the typical FFN that outputs a Vector with probabilities for each respective action 
+- These Policies in Deep RL are Parameterized Policies (Neural Networks or Models with Parameters/Weights that can be learned) -- Computable Functions that have parameters which we can adjust to update or change the behavior of the Agent (parameters of a Policy are typically denoted with the Greek; Theta (θ) or Phi (Φ) characters)
+- Deterministic Policies: basically the typical FFN that outputs a Vector with logits for each respective action (we take the Max always, these logits after softmax-ing are the Action probabiltiies but we do not sample here & that is why it is Deterministic)
 - Stochastic Policies: these can be broken down into two further sub-classes; *Categorical Policies* and *Diagonal Gaussian Policies* -- but in essence these are Policies that involve random variables or probabilities and are not deterministically computable outputs of a function, but are expected outputs of a function conditioned on the data 
   - Categorical Policies: are used in *discrete* action spaces and stem from the Categorical Distribution- https://en.wikipedia.org/wiki/Categorical_distribution
     - This distribution is also referred to as the "Generalized Bernoulli Distrbution" or "Mulinoulli Distribution" -- basically if we have K actions available to us, the sum of the probabilities for all of these actions must sum to 1 and the values for each action must be in the range of [0, 1]
@@ -75,6 +76,7 @@ Reward & Return
 The RL Problem
 - Fundamentally, Reinforcement Learning is about Maximizing Reward (be it a Finite or Infinite-Discounted measure) by selecting a Policy that when applied by an Agent maximizes *Expected Return* across Trajectories. (expected because environments may have Stochasticity baked in to the State Transitions that are non-incorporatable to the Policy, at least not entirely in their full resolution)
 - The Central Optimization Problem boils down to Selecting the Policy (pi) that maximizes *expected reward*, which approximates the *optimal policy* (pi_star)
+- Expected Return is typically represented mathematically as; J(pi) (where pi is a Policy) and the Central Optimization Problem looks like; pi_star = argmax J(pi) (take the Policy that maximizes Expected Return, this approximates or is equivalent to the Optimal Policy)
 
 
 Value Functions
