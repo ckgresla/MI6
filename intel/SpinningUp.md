@@ -16,6 +16,7 @@ some notes from the documentation over at- https://spinningup.openai.com/en/late
 - Optimal Q-Function and The Optimal Action: The Optimal Action-Value Function (i.e Q_star(s, a)) and Optimal Policy (V_star(s)) which outputs an Action, that is because the Optimal Value-Function determines Expected Rewards for Actions A in the Current State S and is also Optimal we can take the Argmax (wrt Value output) of the Actions, the Optimal Action -- if there are several "Optimal Actions" that we can get from our Action-Value Function, we can take a random choice from that set but there is a "Deterministic" Optimal Policy that selects the Best action
 - Policy Entropy is a Good Measure of Learning, better than trends in Episode Rewards- http://amid.fish/reproducing-deep-rl (about halfway down in this)
 - Key Papers in RL- https://spinningup.openai.com/en/latest/spinningup/keypapers.html (great list to peep, particularly Section 13 with Classics)
+- In Policy Optimization, determining which Actions are "good" is commonly referred to as the *Credit Assignment Problem* (Schulman, thesis) -- basically when Agent gets reward for their Actions, which prior Actions need to get positively/negatively updated for contributing to the accumulation of Reward?
 
 
 
@@ -122,6 +123,7 @@ Model Free Vs. Model-Based
 - This function can be as simple as providing access to environmental information or it can be a learned function that Predicts the Environment.
 - Having a model of the Environment can be useful to an Agent as it opens the door to being able to plan ahead, but complete/correct models of the Environment are not guaranteed and many RL Environments do not have a "ground-truth" model that is show-able or learnable for the Agent. When we can make a model of the environment it can be very useful (as was the case with [AlphaZero](https://arxiv.org/pdf/1712.01815.pdf), which was GIVEN a world-model) and typically leads to better sample efficiency -- but learning a model of the Environment (from experience alone) involves avoiding many local optimas and fail cases (like the Agent maximizing reward of an incorrect world model)
 - Algorithms that use these Environment Models are referred to as *Model-Based* methods, and Algorithms that do not are called *Model-Free*. Model-Free Algorithms end up being easier to implement and tune but are not as sample efficient as a good Model-Based Method. 
+- RL Algorithms that learn the "**dynamics**" of their environments are *model-based* (policy optimization with traditional methods is model-free as we do not learn the environment dynamics)
 
 
 On-Policy Vs. Off-Policy
