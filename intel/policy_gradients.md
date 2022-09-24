@@ -1,16 +1,19 @@
 # Policy Gradient Notes
-From the recommended background papers for VPG/Reinforce from SpinningUp + other Policy Algortihms
+Information on Policy Optimization papers for methods like; REINFORCE, VPG, TRPO & PPO
 
 
+## General Info
+- Policy Optimization methods are compatible with Discrete and Continuous action spaces (not relegated to either)
+- Directly optimize for the item we care about (policy networks learn from our estimate of the reward gradient, reward being the proficency at the task in question for the Agent, given as feedback from the Environment)
 
 
 ## Papers
 
 ### Simple Statistical Gradient-Following Algorithms for Connectionist Reinforcement Learning (REINFORCE), Williams (1992)
 - Link- https://link.springer.com/content/pdf/10.1007/BF00992696.pdf
-- Main Contributions: the original proposal of a Policy Gradient RL Algorithm, REINFORCE (does not use the same notion of Advantage as is used in the VPG paper and other more modern techniques Policy Gradient techniques)
+- Main Contributions: the original proposal of a Policy Gradient RL Algorithm, REINFORCE (does not use the same notion of Advantage as is used in the VPG paper and other more modern techniques Policy Gradient techniques, instead uses the discounted actual rewards from each timestep)
 
-- Actual RL Agents are anticipated to have to integrate several techniques within the RL umbrella, or at least require us to relinquesh some of the assumptions made about the simplicity of environments and silo'd-ness of the algorithms 
+- Actual RL Agents are anticipated to have to integrate several techniques within the RL umbrella, or at least require us to relinquesh some of the assumptions made about the simplicity of environments and silo'd-ness of the algorithms (like the RL Agents that make it into consumer stuff, this was wrtten in 1992)
 - Associative Tasks: in this paper are defined as Tasks in which the Learner (policy or Agent that takes observations and outputs actions) is required to learn/do an input-->output mapping, wherein the learning signal comes from only immediate rewards, referred to as "Immediate Reinforcement" (differing a bit from the concept of "Delayed Reinforcement", where reward feedback is not immediately provided to the agent)
 - Search is effectively random wrt the Learner (unlike some other RL methods, mentioning A_star search, Nilsson 1980 and adaptive control-like algorithms, Bandits for example which search but also start to exploit based on the current estimate of value)
 - EXPLICIT Computation of the Reward Gradient is not done, it is an *approximation* of the actual Reward signal, this still suffices to train the REINFORCE algorithm though
