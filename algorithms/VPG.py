@@ -36,17 +36,17 @@ class VPG():
     - learning_rate: float, learning rate for Policy Network Optimizer
     - gamma: float, discount rate for reward function
     """
-    def __init__(self, policy_net=None, value_net=None, learning_rate=None, gamma=None, lmbda=None):
+    def __init__(self, policy_net=None, value_net=None):
         super(VPG, self).__init__()
         
         # Algorithm-Environment Info (what types of environments does it work with)
         self.continuous_ok = True
         self.discrete_ok = True
 
-        # Default Hyperparameters
-        self.learning_rate = 0.0002 if learning_rate == None else learning_rate
-        self.gamma = 0.98 if gamma == None else gamma
-        self.lmbda = 0.95 if lmbda == None else lmbda #lambda is a keyword in python, use "lmbda" instead
+        # Default Hyperparameters -- moved into networks instead
+        # self.learning_rate = 0.0002 if learning_rate == None else learning_rate
+        # self.gamma = 0.98 if gamma == None else gamma
+        # self.lmbda = 0.95 if lmbda == None else lmbda #lambda is a keyword in python, use "lmbda" instead
 
         # Network Estimators
         self.pi = policy_net
@@ -54,6 +54,7 @@ class VPG():
 
         # Data Buffer for Episodes
         self.data = {"rewards": [], "action_probs": [], }
+
     def append_data(self, name, item):
         """
         add data from environment to buffer for later training
@@ -75,57 +76,17 @@ class VPG():
         self.data["rewards"] = rtgs #replace standard Episodal Rewards with Rewards-To-Go, inplace (clears out after running optimization)
         return
 
-    # Baseline'd Reward (either 'normalized' or 'GAE')
-    def reward_function(self, baseline_type="normalized"):
-        """
-        Estimate of the "Reward Gradient" per Timestep t in Data Buffer (updating loss for Backprop of Policy Network)
-        (using the "self.data" struct)
-        r_t & prob_t refer to the Reward and Action Probabilities at Timestep T -- r_t gets baselined with GAE for VPG
-        """
-        discounted_reward = 0 #per episode tracker of discounted rewards
-
-        # TODO: this normalization scheme is throwing nans in the training update...
-        # Normalize all Rewards (zero mean and scaled by standard deviation)
-        if baseline_type == "normalized":
-            rewards = torch.tensor(self.data["rewards"])
-            reward_avg, reward_stddev = rewards.mean(), rewards.std() #reference- https://zhuanlan.zhihu.com/p/108034550 for notation
-            rewards = (rewards-reward_avg)/reward_stddev #actual normalization
-            self.data["rewards"] = rewards #update data buffer with the normalized rewards
-
-        # Iterate over Timesteps and Calculate/Update Gradients
-        n_timesteps = len(self.data["rewards"])
-        for t in reversed(range(n_timesteps)):
-            r_t, prob_t = self.data["rewards"][t], self.data["action_probs"][t] #index the baselined reward and action probs
-            discounted_reward = r_t + self.gamma * discounted_reward
-            loss = -torch.log(prob_t) * discounted_reward
-            loss.backward() #add gradients to each weight in network, parameter update happens in batch, after reward_gradient for the whole Episode (data buffer) is calculated (we call optimizer after the gradients for this performance have been fully set)
-
-        # Generalized Advantage Estimation
-
-
-    def parameter_update(self):
-        """
-        Update the Policy Network parameters:
-          1. Clear out previous Gradient Values (associated with current network parameters after prev step)
-          2. Calculate new Gradients for Episode (estimation of True Gradient, via the reward_function)
-          3. Backprop the estimated gradient to the current parameters (update step)
-          4. Clear out the data buffer (new episode with the updated policy network) -- "on-policy" so need match Policy Net actions with correctly associated data
-        """
-        self.optimizer.zero_grad() #clear out prev gradient
-        self.reward_function(baseline_type="None") #estimate reward gradients for prev Episode (adds gradients to network parameters for optimization)
-        # self.reward_function() #estimate reward gradients for prev Episode (adds gradients to network parameters for optimization)
-        self.optimizer.step() #backpropagation/update params as per current Gradient
-        self.reset_data() #clear out data buffer for next Episode
-
 
 # Policy Network (pi; observations --> action_logits) 
-class PolicyNetwork(nn.module):
-    def __init__(self, observation_dim=4, action_dim=2) -> None:
+class PolicyNetwork(nn.Module):
+    def __init__(self, observation_dim=4, action_dim=2, learning_rate=1e-4, gamma=.98) -> None:
         super(PolicyNetwork, self).__init__()
 
         # Input/Output Dimensions for Policy Network (change per environment, default is set to "Cartpole-v1" values)
         self.observation_dim = observation_dim
         self.action_dim = action_dim
+        self.learning_rate = learning_rate
+        self.gamma = gamma
 
         # Policy Network Architecture (given appropriate observation/action | input/output dimensions)
         self.fc1 = nn.Linear(self.observation_dim, 256)
@@ -140,18 +101,76 @@ class PolicyNetwork(nn.module):
         x = self.fc2(x) #no softmax in the forward pass, want return logits! (instead of probs)
         return x #action_logits (log probabilities, can turn into ACTUAL probabilities with softmax)
 
-        # Value Network Architecture (estimates the Reward for a given...)
-    # Reward Function
-    def reward_function(self): 
-        n_timesteps = len(self.data["rewards"])
+    # Reward Function -- estimate the gradient for the Policy Network
+    def reward_function(self, data): 
+        discounted_reward = 0
+        n_timesteps = len(data["rewards"])
 
         for t in reversed(range(n_timesteps)):
-            r_t, prob_t = self.data["rewards"][t], self.data["action_probs"][t] #index the baselined reward and action probs
+            r_t, prob_t = data["rewards"][t], data["action_probs"][t] #index the baselined reward and action probs
             discounted_reward = r_t + self.gamma * discounted_reward
             loss = -torch.log(prob_t) * discounted_reward
             loss.backward() #add gradients to each weight in network, parameter update happens in batch, after reward_gradient for the whole Episode (data buffer) is calculated (we call optimizer after the gradients for this performance have been fully set)
+    
+    # Run a Sequence of Backprop on the Policy Net
+    def parameter_update(self, data):
+        """
+        Update the Policy Network parameters:
+          1. Clear out previous Gradient Values (associated with current network parameters after prev step)
+          2. Calculate new Gradients for Episode (estimation of True Gradient, via the reward_function)
+          3. Backprop the estimated gradient to the current parameters (update step)
+        """
+        self.optimizer.zero_grad() #clear out prev gradient
+        self.reward_function(data) #estimate reward gradients for prev Episode (adds gradients to network parameters for optimization)
+        self.optimizer.step() #backpropagation/update params as per current Gradient
 
 
+# Value Network Architecture (vf; observations --> reward_estimate)
+class ValueNetwork(nn.Module):
+    def __init__(self, observation_dim=4, reward_dim=2, learning_rate=1e-4) -> None:
+        super(ValueNetwork, self).__init__()
+
+        # Input/Output Dimensions for Policy Network (change per environment, default is set to "Cartpole-v1" values)
+        self.observation_dim = observation_dim
+        self.reward_dim = reward_dim
+        self.learning_rate = learning_rate
+
+        # Value Network Architecture
+        self.fc1 = nn.Linear(self.observation_dim, 256)
+        self.fc2 = nn.Linear(256, self.reward_dim)
+        self.optimizer = optim.Adam(self.parameters(), lr=self.learning_rate)
+
+    # Forward Pass
+    def forward(self, x):
+        # x = F.relu(self.fc1(x))
+        # x = torch.tanh(self.fc1(x))
+        x = self.fc1(x)
+        x = self.fc2(x)
+        return x 
+
+    # Reward Function -- estimate the gradient for the Policy Network
+    def reward_function(self, data): 
+        discounted_reward = 0
+        n_timesteps = len(data["rewards"])
+
+        for t in reversed(range(n_timesteps)):
+            r_t, prob_t = data["rewards"][t], data["action_probs"][t] #index the baselined reward and action probs
+            discounted_reward = r_t + self.gamma * discounted_reward
+            loss = -torch.log(prob_t) * discounted_reward
+            loss.backward() #add gradients to each weight in network, parameter update happens in batch, after reward_gradient for the whole Episode (data buffer) is calculated (we call optimizer after the gradients for this performance have been fully set)
+    
+    # Run a Sequence of Backprop on the Policy Net
+    def parameter_update(self, data):
+        """
+        Update the Policy Network parameters:
+          1. Clear out previous Gradient Values (associated with current network parameters after prev step)
+          2. Calculate new Gradients for Episode (estimation of True Gradient, via the reward_function)
+          3. Backprop the estimated gradient to the current parameters (update step)
+        """
+        self.optimizer.zero_grad() #clear out prev gradient
+        self.reward_function(data) #estimate reward gradients for prev Episode (adds gradients to network parameters for optimization)
+        self.optimizer.step() #backpropagation/update params as per current Gradient
+       
 
 
 # this function needs to be moved into the `reports` util in the "core" dir
@@ -190,7 +209,14 @@ def cartpole_test(num_episodes=1000):
     import gym
 
     env = gym.make('CartPole-v1')
-    vpg = VPG(4, 2, learning_rate=7e-4, gamma=0.98) #has both an Policy and Value Network
+    # Defaults to Cartpole Dims in Both Networks
+    vpg = VPG() #has both an Policy and Value Network
+    pi = PolicyNetwork()
+    pi = PolicyNetwork(learning_rate=0.0002, gamma=0.98)
+    vf = ValueNetwork()
+    vpg.pi = pi
+    vpg.vf = vf
+
 
     episode_reward = 0.0
     print_interval = 20
@@ -206,7 +232,7 @@ def cartpole_test(num_episodes=1000):
 
             # Get Action from Logits (after forward pass w Policy Network)
             obs = torch.from_numpy(s).float() #convert state given from Env into torch vec for passing to network (observation)
-            logits = vpg(obs) #forward pass, computes action logits
+            logits = vpg.pi(obs) #forward pass, computes action logits with Policy Network
             # print(f"logits {logits}\n  for obs {obs}")
             action, prob_a = sd_sampler(logits) #sample action (int) and get corresponding probabilties (from stochastic dist.)
 
@@ -224,7 +250,8 @@ def cartpole_test(num_episodes=1000):
         #may not need this rtg call.... (already computing the rewards to go)
         # vpg.rtg() #computes rewards to go (references the "self.data" buffer & alters the ["reward"] list of values)
 
-        vpg.parameter_update() #after termination of episode, update the policy
+        vpg.pi.parameter_update(vpg.data) #after termination of episode, update the policy
+        vpg.reset_data() #clear out data buffer after training Networks
 
         # Print Info per N Trajectories (episodes of running a specific Policy)
         if n_epi%print_interval==0 and n_epi!=0:
