@@ -101,6 +101,7 @@ class PolicyNetwork(nn.Module):
         x = self.fc2(x) #no softmax in the forward pass, want return logits! (instead of probs)
         return x #action_logits (log probabilities, can turn into ACTUAL probabilities with softmax)
 
+    # TODO: GAE GOES IN HERE
     # Reward Function -- estimate the gradient for the Policy Network
     def reward_function(self, data): 
         discounted_reward = 0
@@ -127,7 +128,7 @@ class PolicyNetwork(nn.Module):
 
 # Value Network Architecture (vf; observations --> reward_estimate)
 class ValueNetwork(nn.Module):
-    def __init__(self, observation_dim=4, reward_dim=2, learning_rate=1e-4) -> None:
+    def __init__(self, observation_dim=4, reward_dim=1, learning_rate=1e-4) -> None:
         super(ValueNetwork, self).__init__()
 
         # Input/Output Dimensions for Policy Network (change per environment, default is set to "Cartpole-v1" values)
@@ -170,7 +171,8 @@ class ValueNetwork(nn.Module):
         self.optimizer.zero_grad() #clear out prev gradient
         self.reward_function(data) #estimate reward gradients for prev Episode (adds gradients to network parameters for optimization)
         self.optimizer.step() #backpropagation/update params as per current Gradient
-       
+
+
 
 
 # this function needs to be moved into the `reports` util in the "core" dir
@@ -205,59 +207,62 @@ def sd_sampler(action_logits):
 
 
 # Run Algorithm on Cartpole as Example
-def cartpole_test(num_episodes=1000):
+def cartpole_test(num_epochs=10000, num_episodes=10):
     import gym
 
     env = gym.make('CartPole-v1')
     # Defaults to Cartpole Dims in Both Networks
-    vpg = VPG() #has both an Policy and Value Network
-    pi = PolicyNetwork()
+    # pi = PolicyNetwork()
     pi = PolicyNetwork(learning_rate=0.0002, gamma=0.98)
     vf = ValueNetwork()
-    vpg.pi = pi
-    vpg.vf = vf
+    vpg = VPG(pi, vf) #has both an Policy and Value Network
 
 
-    episode_reward = 0.0
     print_interval = 20
 
 
     # Performing a Optimization Step per Episode (unlike the batched SpinningUp Implementation)
-    for n_epi in range(num_episodes):
-        s = env.reset()
-        done = False
+    for epoch in range(num_epochs):
+        epoch_reward = 0.0
+        for episode in range(num_episodes):
+            s = env.reset()
+            done = False
 
-        while not done: 
-            # env.render() #human viz of training process
+            while not done: 
+                # env.render() #human viz of training process
 
-            # Get Action from Logits (after forward pass w Policy Network)
-            obs = torch.from_numpy(s).float() #convert state given from Env into torch vec for passing to network (observation)
-            logits = vpg.pi(obs) #forward pass, computes action logits with Policy Network
-            # print(f"logits {logits}\n  for obs {obs}")
-            action, prob_a = sd_sampler(logits) #sample action (int) and get corresponding probabilties (from stochastic dist.)
+                # Get Action from Logits (after forward pass w Policy Network)
+                obs = torch.from_numpy(s).float() #convert state given from Env into torch vec for passing to network (observation)
+                logits = vpg.pi(obs) #forward pass, computes action logits with Policy Network
+                # print(f"logits {logits}\n  for obs {obs}")
+                action, prob_a = sd_sampler(logits) #sample action (int) and get corresponding probabilties (from stochastic dist.)
 
-            # Interaction Step w Environment (say at; timestep t)
-            state_t_1, reward_t, done, info = env.step(action) #recieve next state (t+1) and reward for taken action (reward at timestep t)
-            
-            # Append Data to Buffer + Track State/Rewards
-            vpg.append_data("rewards", reward_t) #append the reward for the current step to bufer
-            vpg.append_data("action_probs", prob_a) #append the probability of the taken action for the current step to buffer
-            s = state_t_1 #next/new state is now the current state
-            episode_reward += reward_t #episode reward
+                # Interaction Step w Environment (say at; timestep t)
+                state_t_1, reward_t, done, info = env.step(action) #recieve next state (t+1) and reward for taken action (reward at timestep t)
+                
+                # Append Data to Buffer + Track State/Rewards
+                vpg.append_data("rewards", reward_t) #append the reward for the current step to bufer
+                vpg.append_data("action_probs", prob_a) #append the probability of the taken action for the current step to buffer
+                s = state_t_1 #next/new state is now the current state
+                # episode_reward += reward_t #episode reward
+                epoch_reward += reward_t #episode reward
 
-        # SpinningUp Style Metrics
-        # episode_return, episode_len = sum(vpg.data["rewards"]), len(vpg.data["rewards"])
-        #may not need this rtg call.... (already computing the rewards to go)
-        # vpg.rtg() #computes rewards to go (references the "self.data" buffer & alters the ["reward"] list of values)
+            # SpinningUp Style Metrics
+            # episode_return, episode_len = sum(vpg.data["rewards"]), len(vpg.data["rewards"])
+            #may not need this rtg call.... (already computing the rewards to go)
+            # vpg.rtg() #computes rewards to go (references the "self.data" buffer & alters the ["reward"] list of values)
 
         vpg.pi.parameter_update(vpg.data) #after termination of episode, update the policy
         vpg.reset_data() #clear out data buffer after training Networks
 
         # Print Info per N Trajectories (episodes of running a specific Policy)
-        if n_epi%print_interval==0 and n_epi!=0:
+        # if n_epi%print_interval==0 and n_epi!=0:
             # print("Episode {}\tavg_score {}".format(n_epi, score/print_interval)) #original print statement
-            print_info(n_epi, print_interval, episode_reward)
-            episode_reward = 0.0 #reset reward for tracking next sequence
+            # print_info(n_epi, print_interval, episode_reward)
+            # episode_reward = 0.0 #reset reward for tracking next sequence
+        if epoch % 10 == 0:
+            print("Epoch {}    avg_score {}".format(epoch, epoch_reward/num_episodes))
+
     env.close()
 
 
