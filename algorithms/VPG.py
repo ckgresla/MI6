@@ -53,7 +53,10 @@ class VPG():
         self.vf = value_net
 
         # Data Buffer for Episodes
-        self.data = {"rewards": [], "action_probs": [], }
+        self.data_keys = ["rewards", "action_probs", "vf_estimate"]
+        self.data = {}
+        for key in self.data_keys:
+            self.data[key] = []
 
     def append_data(self, name, item):
         """
@@ -63,9 +66,12 @@ class VPG():
 
     def reset_data(self):
         """
-        Reset Data store after updating Policy (new policy means we track new buffer of data)
+        Reset Data store after updating Nets (new buffer for the new data/Networks)
         """
-        self.data= {"rewards": [], "action_probs": []} #reset Data buffer after weight update
+        self.data = {}
+        for key in self.data_keys:
+            self.data[key] = []
+        
 
     # Calculate Rewards-To-Go (reward gradient only comes from current action/reward & subsequent action/reward pairs, not prior pairs!)
     def rtg(self):
@@ -108,7 +114,8 @@ class PolicyNetwork(nn.Module):
         n_timesteps = len(data["rewards"])
 
         for t in reversed(range(n_timesteps)):
-            r_t, prob_t = data["rewards"][t], data["action_probs"][t] #index the baselined reward and action probs
+            # r_t, prob_t = data["rewards"][t], data["action_probs"][t] #using the actual reward signal for weight update
+            r_t, prob_t = data["vf_estimate"][t].item(), data["action_probs"][t] #uses the output of the Value Function to estimate reward!
             discounted_reward = r_t + self.gamma * discounted_reward
             loss = -torch.log(prob_t) * discounted_reward
             loss.backward() #add gradients to each weight in network, parameter update happens in batch, after reward_gradient for the whole Episode (data buffer) is calculated (we call optimizer after the gradients for this performance have been fully set)
@@ -126,7 +133,7 @@ class PolicyNetwork(nn.Module):
         self.optimizer.step() #backpropagation/update params as per current Gradient
 
 
-# Value Network Architecture (vf; observations --> reward_estimate)
+# Value Network Architecture (vf; observations --> vf_estimate)
 class ValueNetwork(nn.Module):
     def __init__(self, observation_dim=4, reward_dim=1, learning_rate=1e-4) -> None:
         super(ValueNetwork, self).__init__()
@@ -155,10 +162,10 @@ class ValueNetwork(nn.Module):
         n_timesteps = len(data["rewards"])
 
         for t in reversed(range(n_timesteps)):
-            r_t, prob_t = data["rewards"][t], data["action_probs"][t] #index the baselined reward and action probs
-            discounted_reward = r_t + self.gamma * discounted_reward
-            loss = -torch.log(prob_t) * discounted_reward
-            loss.backward() #add gradients to each weight in network, parameter update happens in batch, after reward_gradient for the whole Episode (data buffer) is calculated (we call optimizer after the gradients for this performance have been fully set)
+            r_t, pred_t = torch.tensor([data["rewards"][t]]), data["vf_estimate"][t] #make the actual reward (float) a tensor for error calculation
+            reward_delta = torch.nn.functional.mse_loss(r_t, pred_t) #loss for value function
+            loss = reward_delta
+            loss.backward() #add the calculated grads to the Value Network Params
     
     # Run a Sequence of Backprop on the Policy Net
     def parameter_update(self, data):
@@ -207,7 +214,7 @@ def sd_sampler(action_logits):
 
 
 # Run Algorithm on Cartpole as Example
-def cartpole_test(num_epochs=10000, num_episodes=10):
+def cartpole_test(num_epochs=10000, num_episodes=1):
     import gym
 
     env = gym.make('CartPole-v1')
@@ -217,13 +224,10 @@ def cartpole_test(num_epochs=10000, num_episodes=10):
     vf = ValueNetwork()
     vpg = VPG(pi, vf) #has both an Policy and Value Network
 
-
-    print_interval = 20
-
-
     # Performing a Optimization Step per Episode (unlike the batched SpinningUp Implementation)
     for epoch in range(num_epochs):
         epoch_reward = 0.0
+        vf_error = 0.0
         for episode in range(num_episodes):
             s = env.reset()
             done = False
@@ -237,15 +241,20 @@ def cartpole_test(num_epochs=10000, num_episodes=10):
                 # print(f"logits {logits}\n  for obs {obs}")
                 action, prob_a = sd_sampler(logits) #sample action (int) and get corresponding probabilties (from stochastic dist.)
 
+                # Value Function Reward Estimate
+                vf_estimate = vpg.vf(obs)
+
                 # Interaction Step w Environment (say at; timestep t)
                 state_t_1, reward_t, done, info = env.step(action) #recieve next state (t+1) and reward for taken action (reward at timestep t)
                 
                 # Append Data to Buffer + Track State/Rewards
-                vpg.append_data("rewards", reward_t) #append the reward for the current step to bufer
+                vpg.append_data("rewards", reward_t) #append the reward for the current step to buffer
                 vpg.append_data("action_probs", prob_a) #append the probability of the taken action for the current step to buffer
+                vpg.data["vf_estimate"].append(vf_estimate)
                 s = state_t_1 #next/new state is now the current state
                 # episode_reward += reward_t #episode reward
                 epoch_reward += reward_t #episode reward
+                vf_error += -1*(vf_estimate.item() - reward_t)
 
             # SpinningUp Style Metrics
             # episode_return, episode_len = sum(vpg.data["rewards"]), len(vpg.data["rewards"])
@@ -253,6 +262,7 @@ def cartpole_test(num_epochs=10000, num_episodes=10):
             # vpg.rtg() #computes rewards to go (references the "self.data" buffer & alters the ["reward"] list of values)
 
         vpg.pi.parameter_update(vpg.data) #after termination of episode, update the policy
+        vpg.vf.parameter_update(vpg.data) #after termination of episode, update the Value Function
         vpg.reset_data() #clear out data buffer after training Networks
 
         # Print Info per N Trajectories (episodes of running a specific Policy)
@@ -260,8 +270,8 @@ def cartpole_test(num_epochs=10000, num_episodes=10):
             # print("Episode {}\tavg_score {}".format(n_epi, score/print_interval)) #original print statement
             # print_info(n_epi, print_interval, episode_reward)
             # episode_reward = 0.0 #reset reward for tracking next sequence
-        if epoch % 10 == 0:
-            print("Epoch {}    avg_score {}".format(epoch, epoch_reward/num_episodes))
+        if epoch % 100 == 0:
+            print(f"Epoch {epoch}    avg_score {epoch_reward/num_episodes:.0f}    VF Error {vf_error/num_episodes:.3f}")
 
     env.close()
 
