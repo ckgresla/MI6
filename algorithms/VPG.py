@@ -53,7 +53,7 @@ class VPG():
         self.vf = value_net
 
         # Data Buffer for Episodes
-        self.data_keys = ["rewards", "action_probs", "vf_estimate"]
+        self.data_keys = ["rewards", "action_probs", "vf_estimate", "normalized_rewards"]
         self.data = {}
         for key in self.data_keys:
             self.data[key] = []
@@ -85,7 +85,7 @@ class VPG():
 
 # Policy Network (pi; observations --> action_logits) 
 class PolicyNetwork(nn.Module):
-    def __init__(self, observation_dim=4, action_dim=2, learning_rate=1e-4, gamma=.98) -> None:
+    def __init__(self, observation_dim=4, action_dim=2, learning_rate=1e-4, gamma=.98, lmbda=0.95) -> None:
         super(PolicyNetwork, self).__init__()
 
         # Input/Output Dimensions for Policy Network (change per environment, default is set to "Cartpole-v1" values)
@@ -93,6 +93,7 @@ class PolicyNetwork(nn.Module):
         self.action_dim = action_dim
         self.learning_rate = learning_rate
         self.gamma = gamma
+        self.lmbda = lmbda #lambda is a keyword in python, use "lmbda" instead
 
         # Policy Network Architecture (given appropriate observation/action | input/output dimensions)
         self.fc1 = nn.Linear(self.observation_dim, 256)
@@ -112,14 +113,49 @@ class PolicyNetwork(nn.Module):
     def reward_function(self, data): 
         discounted_reward = 0
         n_timesteps = len(data["rewards"])
+        use_advantages = True
 
-        for t in reversed(range(n_timesteps)):
-            # r_t, prob_t = data["rewards"][t], data["action_probs"][t] #using the actual reward signal for weight update
-            r_t, prob_t = data["vf_estimate"][t].item(), data["action_probs"][t] #uses the output of the Value Function to estimate reward!
-            discounted_reward = r_t + self.gamma * discounted_reward
-            loss = -torch.log(prob_t) * discounted_reward
-            loss.backward() #add gradients to each weight in network, parameter update happens in batch, after reward_gradient for the whole Episode (data buffer) is calculated (we call optimizer after the gradients for this performance have been fully set)
-    
+        if use_advantages:
+            # GAE Calculation
+            value_estimates = [i.item() for i in data["vf_estimate"]]
+            value_estimates = torch.tensor(value_estimates)
+
+            rewards = torch.tensor(data["rewards"])
+
+            # Calculating Advantage as done in SpinningUp
+            # deltas = rewards[:-1] + self.gamma * value_estimates[1:] - value_estimates[:-1]#as listed in spinningup
+            # advantages = discount_cumsum(deltas.numpy(), self.gamma * self.lmbda)
+            # actionprobs = data['action_probs'] #already should be a tensor
+            # actionprobs = actionprobs[:-1]
+
+            advantages = torch.zeros(n_timesteps + 1) #referencing the method in- https://towardsdatascience.com/generalized-advantage-estimate-maths-and-code-b5d5bd3ce737
+
+            for t in reversed(range(n_timesteps)):
+                prob_t, r_t, vfe_t, vfe_tm1 = data["action_probs"][t], data["rewards"][t], data["vf_estimate"][t].item(), data["vf_estimate"][t-1].item()
+                # delta_t = reward_t + (gamma * vf_estimate_t) <-- CKG Testing delta calc, may not be correct
+                # delta_t = data["reward"][t] + (self.gamma * data["vf_estimate"][t-1]) - data["vf_estimate"][t] #below, calls og dict
+                delta_t = r_t + (self.gamma * vfe_tm1) - vfe_t
+                advantages[t] = delta_t + (self.lmbda * self.gamma + advantages[t+1])
+
+                # loss = -(torch.log(actionprobs) * advantages).mean() #spinningup style
+                loss = -torch.log(prob_t) * advantages[t]
+                loss.backward()
+
+        else:
+            # Normalizing Rewards -- got to work
+            reward_tensor = torch.tensor(data["rewards"])
+            mu, sigma = torch.mean(reward_tensor), torch.std(reward_tensor)
+            data["normalized_rewards"] = (reward_tensor - mu)/(sigma + 1e-10) #add a small epsilon to avoid nans (see- https://stackoverflow.com/questions/49801638/normalizing-rewards-to-generate-returns-in-reinforcement-learning)
+
+            for t in reversed(range(n_timesteps)):
+                # Reward Gradients (we got some options here)
+                # r_t, prob_t = data["rewards"][t], data["action_probs"][t] #using the actual reward signal for weight update
+                r_t, prob_t = data["vf_estimate"][t].item(), data["action_probs"][t] #uses the output of the Value Function to estimate reward
+                # r_t, prob_t = data["normalized_rewards"][t].item(), data["action_probs"][t] #uses Normalized Rewards
+                discounted_reward = r_t + self.gamma * discounted_reward
+                loss = -torch.log(prob_t) * discounted_reward
+                loss.backward() #add gradients to each weight in network, parameter update happens in batch, after reward_gradient for the whole Episode (data buffer) is calculated (we call optimizer after the gradients for this performance have been fully set)
+
     # Run a Sequence of Backprop on the Policy Net
     def parameter_update(self, data):
         """
@@ -211,6 +247,26 @@ def sd_sampler(action_logits):
 
     return action.item(), action_prob
 
+# Discounted CumSum from SpinningUp/Ray- https://github.com/openai/spinningup/blob/038665d62d569055401d91856abb287263096178/spinup/algos/pytorch/vpg/core.py#L29
+def discount_cumsum(x, discount):
+    """
+    magic from rllab for computing discounted cumulative sums of vectors.
+
+    input:
+        vector x,
+        [x0,
+         x1,
+         x2]
+
+    output:
+        [x0 + discount * x1 + discount^2 * x2,
+         x1 + discount * x2,
+         x2]
+    """
+    import scipy.signal
+    print(x)
+    print(discount)
+    return scipy.signal.lfilter([1], [1, float(-discount)], x[::-1], axis=0)[::-1]
 
 
 # Run Algorithm on Cartpole as Example
