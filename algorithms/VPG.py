@@ -3,12 +3,13 @@
 VPG is commonly "equated" to the REINFORCE, as they are similar "baseline" Policy Optimization Algorithms however I have chosen to implement them separately here as VPG, as introduced in the original paper, mentions/uses the notion of Baselined rewards -- a departure from the regular discounted rewards used to train the older REINFORCE Algorithm. The Folks behind SpinningUp also implement VPG with the GAE, so I will differentiate these (albiet a nitpicky differentiation)
 
 Baselines Implemented: 
-1. Normalized Reward
+1. Normalized Reward (scaled version of REINFORCE ~= to this work)
 2. Generalized Advantage Estimation (GAE)
 
-Because of this "Baselined" Reward we now need 2 Neural Networks (to approximate 2 functions), a Policy Network (agent's brain) and a Value Network (estimate the reward gradient) -- this is still an on-policy algorithm despite now explicitly implementing a State-Value function, as the thing making decisions (the Policy Network) is the thing that we are altering to change behavior (see the SpinningUp Notes in the "intel" dir for more info)
-
-Reward calculations here also follow the "Rewards-To-Go" model of calculating rewards- https://spinningup.openai.com/en/latest/spinningup/rl_intro3.html#don-t-let-the-past-distract-you -- essentially actions are only reinforced (weights get updated according to the goodness of the action) with the rewards that come AFTER taking the action
+Because of this "Baselined" Reward we now need 2 Neural Networks (to approximate 2 functions)
+  1. a Policy Network (agent's brain) 
+  2. a Value Network (estimate the reward gradient) 
+This is still an on-policy algorithm despite now explicitly implementing a State-Value function, as the thing making decisions (the Policy Network) is the thing that we are altering to change behavior (see the SpinningUp Notes in the "intel" dir for more info)
 
 """
 
@@ -29,24 +30,19 @@ class VPG():
         Sutton et al. 2000- https://proceedings.neurips.cc/paper/1999/file/464d828b85b0bed98e80ade0a5c43b0f-Paper.pdf
 
     Parameters:
-    - observation_dim: int, number of observations recieved from Environment
-    - action_dim: int, number of actions Policy/Agent can take in Environment
-    - network_architecture: dict, specification for the structure (layers, activations, optimizer, etc.) of the Policy Network
-            Example: {"fc1" : 256, "fc2" : 256, "optimizer" = }  <-- figure out how make (maybe make this a function we call instead?)
-    - learning_rate: float, learning rate for Policy Network Optimizer
-    - gamma: float, discount rate for reward function
-    """
+    - policy_net: custom class, instantiated in driver function below
+    - value_net: custom class, instantiated in driver function below
+   """
     def __init__(self, policy_net=None, value_net=None):
         super(VPG, self).__init__()
-        
-        # Algorithm-Environment Info (what types of environments does it work with)
+
+        # Instantiation Checks
+        assert policy_net != None, "Policy Network is None, please specify your Policy Net for VPG"
+        assert value_net != None, "Value Network is None, please specify your Value Net for VPG"
+
+        # Algorithm-Environment Info (flags to check if the environment [action, observation] is compatible with the method)
         self.continuous_ok = True
         self.discrete_ok = True
-
-        # Default Hyperparameters -- moved into networks instead
-        # self.learning_rate = 0.0002 if learning_rate == None else learning_rate
-        # self.gamma = 0.98 if gamma == None else gamma
-        # self.lmbda = 0.95 if lmbda == None else lmbda #lambda is a keyword in python, use "lmbda" instead
 
         # Network Estimators
         self.pi = policy_net
@@ -66,13 +62,13 @@ class VPG():
 
     def reset_data(self):
         """
-        Reset Data store after updating Nets (new buffer for the new data/Networks)
+        Reset Data store after updating Nets (new buffer for the new data)
         """
         self.data = {}
         for key in self.data_keys:
             self.data[key] = []
-        
 
+    # Using a reversed(range()) loop, might use this later
     # Calculate Rewards-To-Go (reward gradient only comes from current action/reward & subsequent action/reward pairs, not prior pairs!)
     def rtg(self):
         n_rewards = len(self.data["rewards"]) #number of rewards working with
@@ -88,12 +84,14 @@ class PolicyNetwork(nn.Module):
     def __init__(self, observation_dim=4, action_dim=2, learning_rate=1e-4, gamma=.98, lmbda=0.95) -> None:
         super(PolicyNetwork, self).__init__()
 
+        # Hyperparameters
+        self.learning_rate = learning_rate
+        self.gamma = gamma
+        self.lmbda = lmbda #lambda is a keyword, use "lmbda" instead
+
         # Input/Output Dimensions for Policy Network (change per environment, default is set to "Cartpole-v1" values)
         self.observation_dim = observation_dim
         self.action_dim = action_dim
-        self.learning_rate = learning_rate
-        self.gamma = gamma
-        self.lmbda = lmbda #lambda is a keyword in python, use "lmbda" instead
 
         # Policy Network Architecture (given appropriate observation/action | input/output dimensions)
         self.fc1 = nn.Linear(self.observation_dim, 256)
@@ -102,45 +100,35 @@ class PolicyNetwork(nn.Module):
 
     # Forward Pass (given observation, matmul & activate through the network)
     def forward(self, x):
-        # x = F.relu(self.fc1(x)) #original Activation in minRL
-        x = torch.tanh(self.fc1(x))
-        # x = F.softmax(self.fc2(x), dim=0) #original Final Layer (no go as softmax can damage training)
-        x = self.fc2(x) #no softmax in the forward pass, want return logits! (instead of probs)
+        x = F.relu(self.fc1(x)) #original Activation in minRL
+        # x = torch.tanh(self.fc1(x))
+        x = self.fc2(x) #no softmax in the forward pass, want return logits! (instead of probs, for training)
         return x #action_logits (log probabilities, can turn into ACTUAL probabilities with softmax)
 
-    # TODO: GAE GOES IN HERE
     # Reward Function -- estimate the gradient for the Policy Network
-    def reward_function(self, data): 
+    def reward_function(self, data, use_gae=True): 
         discounted_reward = 0
         n_timesteps = len(data["rewards"])
-        use_advantages = True
 
-        if use_advantages:
+        # Calculate the Reward Gradient Via GAE
+        if use_gae:
             # GAE Calculation
             value_estimates = [i.item() for i in data["vf_estimate"]]
             value_estimates = torch.tensor(value_estimates)
 
             rewards = torch.tensor(data["rewards"])
-
-            # Calculating Advantage as done in SpinningUp
-            # deltas = rewards[:-1] + self.gamma * value_estimates[1:] - value_estimates[:-1]#as listed in spinningup
-            # advantages = discount_cumsum(deltas.numpy(), self.gamma * self.lmbda)
-            # actionprobs = data['action_probs'] #already should be a tensor
-            # actionprobs = actionprobs[:-1]
-
             advantages = torch.zeros(n_timesteps + 1) #referencing the method in- https://towardsdatascience.com/generalized-advantage-estimate-maths-and-code-b5d5bd3ce737
 
             for t in reversed(range(n_timesteps)):
                 prob_t, r_t, vfe_t, vfe_tm1 = data["action_probs"][t], data["rewards"][t], data["vf_estimate"][t].item(), data["vf_estimate"][t-1].item()
-                # delta_t = reward_t + (gamma * vf_estimate_t) <-- CKG Testing delta calc, may not be correct
-                # delta_t = data["reward"][t] + (self.gamma * data["vf_estimate"][t-1]) - data["vf_estimate"][t] #below, calls og dict
+                # delta_t = data["reward"][t] + (self.gamma * data["vf_estimate"][t-1]) - data["vf_estimate"][t] #same as below, calls og dict
                 delta_t = r_t + (self.gamma * vfe_tm1) - vfe_t
-                advantages[t] = delta_t + (self.lmbda * self.gamma + advantages[t+1])
+                advantages[t] = delta_t + (self.lmbda * self.gamma + advantages[t+1]) #TD Residual
 
-                # loss = -(torch.log(actionprobs) * advantages).mean() #spinningup style
                 loss = -torch.log(prob_t) * advantages[t]
                 loss.backward()
 
+        # Calculate the Reward Gradient Via Normalized Reward ESTIMATES (or via the VF Network)
         else:
             # Normalizing Rewards -- got to work
             reward_tensor = torch.tensor(data["rewards"])
@@ -149,9 +137,9 @@ class PolicyNetwork(nn.Module):
 
             for t in reversed(range(n_timesteps)):
                 # Reward Gradients (we got some options here)
-                # r_t, prob_t = data["rewards"][t], data["action_probs"][t] #using the actual reward signal for weight update
-                r_t, prob_t = data["vf_estimate"][t].item(), data["action_probs"][t] #uses the output of the Value Function to estimate reward
-                # r_t, prob_t = data["normalized_rewards"][t].item(), data["action_probs"][t] #uses Normalized Rewards
+                # r_t, prob_t = data["rewards"][t], data["action_probs"][t] #using the actual reward signal for weight update (same as REINFORCE)
+                # r_t, prob_t = data["vf_estimate"][t].item(), data["action_probs"][t] #uses the output of the Value Function to estimate reward
+                r_t, prob_t = data["normalized_rewards"][t].item(), data["action_probs"][t] #uses Normalized Rewards
                 discounted_reward = r_t + self.gamma * discounted_reward
                 loss = -torch.log(prob_t) * discounted_reward
                 loss.backward() #add gradients to each weight in network, parameter update happens in batch, after reward_gradient for the whole Episode (data buffer) is calculated (we call optimizer after the gradients for this performance have been fully set)
@@ -247,27 +235,6 @@ def sd_sampler(action_logits):
 
     return action.item(), action_prob
 
-# Discounted CumSum from SpinningUp/Ray- https://github.com/openai/spinningup/blob/038665d62d569055401d91856abb287263096178/spinup/algos/pytorch/vpg/core.py#L29
-def discount_cumsum(x, discount):
-    """
-    magic from rllab for computing discounted cumulative sums of vectors.
-
-    input:
-        vector x,
-        [x0,
-         x1,
-         x2]
-
-    output:
-        [x0 + discount * x1 + discount^2 * x2,
-         x1 + discount * x2,
-         x2]
-    """
-    import scipy.signal
-    print(x)
-    print(discount)
-    return scipy.signal.lfilter([1], [1, float(-discount)], x[::-1], axis=0)[::-1]
-
 
 # Run Algorithm on Cartpole as Example
 def cartpole_test(num_epochs=10000, num_episodes=1):
@@ -276,13 +243,14 @@ def cartpole_test(num_epochs=10000, num_episodes=1):
     env = gym.make('CartPole-v1')
     # Defaults to Cartpole Dims in Both Networks
     # pi = PolicyNetwork()
-    pi = PolicyNetwork(learning_rate=0.0002, gamma=0.98)
+    pi = PolicyNetwork(learning_rate=0.0002, gamma=0.99, lmbda=0.92)
     vf = ValueNetwork()
     vpg = VPG(pi, vf) #has both an Policy and Value Network
 
     # Performing a Optimization Step per Episode (unlike the batched SpinningUp Implementation)
     for epoch in range(num_epochs):
         epoch_reward = 0.0
+        #episode_len = 0 #no need to track len, same as rewards (reward of 1 is given per timestep of balancing, no diff in values)
         vf_error = 0.0
         for episode in range(num_episodes):
             s = env.reset()
@@ -308,14 +276,10 @@ def cartpole_test(num_epochs=10000, num_episodes=1):
                 vpg.append_data("action_probs", prob_a) #append the probability of the taken action for the current step to buffer
                 vpg.data["vf_estimate"].append(vf_estimate)
                 s = state_t_1 #next/new state is now the current state
-                # episode_reward += reward_t #episode reward
-                epoch_reward += reward_t #episode reward
-                vf_error += -1*(vf_estimate.item() - reward_t)
 
-            # SpinningUp Style Metrics
-            # episode_return, episode_len = sum(vpg.data["rewards"]), len(vpg.data["rewards"])
-            #may not need this rtg call.... (already computing the rewards to go)
-            # vpg.rtg() #computes rewards to go (references the "self.data" buffer & alters the ["reward"] list of values)
+                # Track Metrics
+                epoch_reward += reward_t #epoch reward (averaged out later)
+                vf_error += -1*(vf_estimate.item() - reward_t)
 
         vpg.pi.parameter_update(vpg.data) #after termination of episode, update the policy
         vpg.vf.parameter_update(vpg.data) #after termination of episode, update the Value Function
@@ -327,7 +291,7 @@ def cartpole_test(num_epochs=10000, num_episodes=1):
             # print_info(n_epi, print_interval, episode_reward)
             # episode_reward = 0.0 #reset reward for tracking next sequence
         if epoch % 100 == 0:
-            print(f"Epoch {epoch}    avg_score {epoch_reward/num_episodes:.0f}    VF Error {vf_error/num_episodes:.3f}")
+            print(f"Epoch {epoch}    avg_score {epoch_reward/num_episodes:.0f}    VF Error {vf_error/num_episodes:.4f}")
 
     env.close()
 

@@ -1,14 +1,19 @@
 # Agent Focused RL
 
-A pocket-repo for RL stuff; Algorithms, pre-trained Agents and Pointers to information
+A pocket-repo for RL stuff; Algorithms, pre-trained Agents, implementations and pointers to information
 
 
 ## Hit-List
-Algorithms yet to be implemented
+Algorithms already implemented;
 1. REINFORCE
 2. VPG
-  - one with the schulman Generalized Advantage Estimation (VPG) & one w/o (REINFORCE) -- technically same algorithm but slightly different
-3. TBD
+  -  VPG makes use of Schulman's Generalized Advantage Estimation whereas the REINFORCE implementation uses rewards per timestep (reaction for each action) -- the algorithms are basically the same with the exception of VPG's Value Network/Function, Normalized and Baselined rewards
+Algorithms yet to be implemented;
+3. TRPO
+4. DQN
+
+Tools to leverage
+- WarpDrive- https://github.com/salesforce/warp-drive (dare I say "blazingly" fast parallelization for Multi-Agent training via GPU + PyTorch)
 
 
 ## Info
@@ -33,6 +38,6 @@ Useful stuff to refer to
 - SeungEunRho's minimalRL- https://github.com/seungeunrho/minimalRL (great torch implementations)
 - garage- https://github.com/rlworkgroup/garage (toolkit for RL research, formerly called "rllab")
 - ray- https://github.com/ray-project/ray (RL for Industry, great documentation)
-- OpenAI SpinningUp- https://spinningup.openai.com/en/latest/index.html (nice to reference, actually should just read the papers)
+- OpenAI SpinningUp- https://spinningup.openai.com/en/latest/index.html
   - Github- https://github.com/openai/spinningup 
 
