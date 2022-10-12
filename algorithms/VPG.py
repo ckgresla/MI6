@@ -105,10 +105,24 @@ class PolicyNetwork(nn.Module):
         x = self.fc2(x) #no softmax in the forward pass, want return logits! (instead of probs, for training)
         return x #action_logits (log probabilities, can turn into ACTUAL probabilities with softmax)
 
+    # Run the Generalized Advantage Estimate on a BATCH of data
+    def gae(self, gamma, lmbda, vf_state, vf_next_state, reward, done):
+        batch_size = done.shape[0]
+        advantage = torch.zeros(batch_size + 1)
+
+        for t in reversed(range(batch_size)):
+            delta_t = reward[t] | (gamma * vf_next_state[t] * done[t]) - vf_state
+            advantage[t] = delta_t + (gamma + lmbda * advantage[t+1] + done[t])
+
+        value_target = advantage[:batch_size] + torch.squeeze(vf_state)
+
+        return advantage[:batch_size], value_target
+
     # Reward Function -- estimate the gradient for the Policy Network
     def reward_function(self, data, use_gae=True): 
         discounted_reward = 0
         n_timesteps = len(data["rewards"])
+        # batch_size = len(data["dones"]) #work with batch size (same as n_timesteps we ran our policy for)
 
         # Calculate the Reward Gradient Via GAE
         if use_gae:
@@ -122,7 +136,8 @@ class PolicyNetwork(nn.Module):
             for t in reversed(range(n_timesteps)):
                 prob_t, r_t, vfe_t, vfe_tm1 = data["action_probs"][t], data["rewards"][t], data["vf_estimate"][t].item(), data["vf_estimate"][t-1].item()
                 # delta_t = data["reward"][t] + (self.gamma * data["vf_estimate"][t-1]) - data["vf_estimate"][t] #same as below, calls og dict
-                delta_t = r_t + (self.gamma * vfe_tm1) - vfe_t
+                # delta_t = r_t + (self.gamma * vfe_tm1) - vfe_t #prior commit
+                delta_t = r_t + (self.gamma * vfe_t) - vfe_tm1
                 advantages[t] = delta_t + (self.lmbda * self.gamma + advantages[t+1]) #TD Residual
 
                 loss = -torch.log(prob_t) * advantages[t]
@@ -168,8 +183,8 @@ class ValueNetwork(nn.Module):
         self.learning_rate = learning_rate
 
         # Value Network Architecture
-        self.fc1 = nn.Linear(self.observation_dim, 256)
-        self.fc2 = nn.Linear(256, self.reward_dim)
+        self.fc1 = nn.Linear(self.observation_dim, 100)
+        self.fc2 = nn.Linear(100, self.reward_dim)
         self.optimizer = optim.Adam(self.parameters(), lr=self.learning_rate)
 
     # Forward Pass
@@ -180,7 +195,7 @@ class ValueNetwork(nn.Module):
         x = self.fc2(x)
         return x 
 
-    # Reward Function -- estimate the gradient for the Policy Network
+    # Loss function (for value estimator, MSE)
     def reward_function(self, data): 
         discounted_reward = 0
         n_timesteps = len(data["rewards"])

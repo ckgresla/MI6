@@ -8,6 +8,7 @@ Algorithms already implemented;
 1. REINFORCE
 2. VPG
   -  VPG makes use of Schulman's Generalized Advantage Estimation whereas the REINFORCE implementation uses rewards per timestep (reaction for each action) -- the algorithms are basically the same with the exception of VPG's Value Network/Function, Normalized and Baselined rewards
+
 Algorithms yet to be implemented;
 3. TRPO
 4. DQN
