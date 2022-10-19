@@ -94,8 +94,8 @@ class PolicyNetwork(nn.Module):
         self.action_dim = action_dim
 
         # Policy Network Architecture (given appropriate observation/action | input/output dimensions)
-        self.fc1 = nn.Linear(self.observation_dim, 256)
-        self.fc2 = nn.Linear(256, self.action_dim)
+        self.fc1 = nn.Linear(self.observation_dim, 32)
+        self.fc2 = nn.Linear(32, self.action_dim)
         self.optimizer = optim.Adam(self.parameters(), lr=self.learning_rate)
 
     # Forward Pass (given observation, matmul & activate through the network)
@@ -183,8 +183,8 @@ class ValueNetwork(nn.Module):
         self.learning_rate = learning_rate
 
         # Value Network Architecture
-        self.fc1 = nn.Linear(self.observation_dim, 100)
-        self.fc2 = nn.Linear(100, self.reward_dim)
+        self.fc1 = nn.Linear(self.observation_dim, 50)
+        self.fc2 = nn.Linear(50, self.reward_dim)
         self.optimizer = optim.Adam(self.parameters(), lr=self.learning_rate)
 
     # Forward Pass
@@ -250,9 +250,19 @@ def sd_sampler(action_logits):
 
     return action.item(), action_prob
 
+# Save Agent Policy Weights along w Metadata as Described- https://pytorch.org/tutorials/recipes/recipes/saving_and_loading_a_general_checkpoint.html
+def save_agent(epoch, policy_weights, avg_reward):
+    save_path = f"agents/vpg-test-{epoch}.pt"
+    torch.save({
+        "epoch" : epoch,
+        "model_state_dict" : policy_weights,
+        "avg_reward" : avg_reward,
+    }, save_path)
+
+
 
 # Run Algorithm on Cartpole as Example
-def cartpole_test(num_epochs=10000, num_episodes=1):
+def cartpole_test(num_epochs=10000, num_episodes=50):
     import gym
 
     env = gym.make('CartPole-v1')
@@ -273,6 +283,7 @@ def cartpole_test(num_epochs=10000, num_episodes=1):
 
             while not done: 
                 # env.render() #human viz of training process
+                env.render() #human viz of training process
 
                 # Get Action from Logits (after forward pass w Policy Network)
                 obs = torch.from_numpy(s).float() #convert state given from Env into torch vec for passing to network (observation)
@@ -295,7 +306,7 @@ def cartpole_test(num_epochs=10000, num_episodes=1):
                 # Track Metrics
                 epoch_reward += reward_t #epoch reward (averaged out later)
                 vf_error += -1*(vf_estimate.item() - reward_t)
-
+    
         vpg.pi.parameter_update(vpg.data) #after termination of episode, update the policy
         vpg.vf.parameter_update(vpg.data) #after termination of episode, update the Value Function
         vpg.reset_data() #clear out data buffer after training Networks
@@ -307,6 +318,7 @@ def cartpole_test(num_epochs=10000, num_episodes=1):
             # episode_reward = 0.0 #reset reward for tracking next sequence
         if epoch % 100 == 0:
             print(f"Epoch {epoch}    avg_score {epoch_reward/num_episodes:.0f}    VF Error {vf_error/num_episodes:.4f}")
+            save_agent(epoch, vpg.pi.state_dict(), epoch_reward/num_episodes)
 
     env.close()
 

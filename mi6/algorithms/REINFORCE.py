@@ -133,16 +133,25 @@ def sd_sampler(action_logits):
     return action.item(), action_prob
 
 
+#taken from VPG
+def save_agent(epoch, policy_weights, avg_reward):
+    save_path = f"agents/REINFORCE-test-{epoch}.pt"
+    torch.save({
+        "epoch" : epoch,
+        "model_state_dict" : policy_weights,
+        "avg_reward" : avg_reward,
+    }, save_path)
 
 # Run Algorithm on Cartpole as Example
-def cartpole_test(num_episodes=1000):
+def cartpole_test(num_episodes=1000000):
     import gym
 
     env = gym.make('CartPole-v1')
     pi = REINFORCE(4, 2, learning_rate=7e-4, gamma=0.95)
 
     score = 0.0
-    print_interval = 20
+    #print_interval = 20
+    print_interval = 1000
 
 
     for n_epi in range(num_episodes):
@@ -179,6 +188,7 @@ def cartpole_test(num_episodes=1000):
         if n_epi%print_interval==0 and n_epi!=0:
             # print("Episode {}\tavg_score {}".format(n_epi, score/print_interval)) #original print statement
             print_info(n_epi, print_interval, score)
+            save_agent(n_epi, pi.state_dict(), score/print_interval)
             score = 0.0
     env.close()
 
