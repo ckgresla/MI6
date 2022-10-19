@@ -4,27 +4,24 @@ A pocket-repo for RL stuff; Algorithms, pre-trained Agents, implementations and 
 
 
 ## Hit-List
-Algorithms already implemented;
+Implemented: 
+- 
+
+Algorithms QUESTIONABLY implemented;
 1. REINFORCE
 2. VPG
   -  VPG makes use of Schulman's Generalized Advantage Estimation whereas the REINFORCE implementation uses rewards per timestep (reaction for each action) -- the algorithms are basically the same with the exception of VPG's Value Network/Function, Normalized and Baselined rewards
 
-Algorithms yet to be implemented;
-3. TRPO
-4. DQN
-
-Tools to leverage
-- WarpDrive- https://github.com/salesforce/warp-drive (dare I say "blazingly" fast parallelization for Multi-Agent training via GPU + PyTorch)
-
 
 ## Info
 Directory Structure
-- "algorithms" contains PyTorch Implementations of each method (has a test use case if file is run @ the command line, intended to be imported thought)
 - "agents" contains saved model weights for Environments 
   - Save New Weights/Controllers as roughly: "{ENV_NAME}-{ALGORITHM}-{STEPS}"
-- "core" has utilities and code that is shared across Algorithms (environment interaction, etc.)
 - "housekeeping" has all of the items for... housekeeping (requirements.txt for env replication, etc.)
-- "intel" has some notes and links to helpful resources, papers and information
+- "intel" has some of my notes and links to; helpful resources, papers and information
+- "mi6" holds the code for all the magic
+  - "algorithms" contains PyTorch Implementations of each method (runnable at terminal or importable)
+  - "core" has utilities and code that is sensible to share across Algorithms (environment interaction, etc.)
 
 
 ## Setup
@@ -41,4 +38,9 @@ Useful stuff to refer to
 - ray- https://github.com/ray-project/ray (RL for Industry, great documentation)
 - OpenAI SpinningUp- https://spinningup.openai.com/en/latest/index.html
   - Github- https://github.com/openai/spinningup 
+
+Tools to leverage
+- WarpDrive- https://github.com/salesforce/warp-drive (dare I say "blazingly" fast parallelization for Multi-Agent training via GPU + PyTorch)
+- PeaRL- https://github.com/LondonNode/Pearl (a set of python/torch based modules for crafting Deep RL agents)
+
 

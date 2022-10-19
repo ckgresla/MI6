@@ -1,15 +1,15 @@
 # Deploy an Agent
 """
-this file will compose the training of an RL Agent (sample usage for importing an algorithm & making an Agent ) 
+this file will compose the training of an RL Agent (sample usage for importing an algorithm & making an Agent)
 """
 
 import gym
 import torch
 
-from algorithms import VPG
-from algorithms import REINFORCE as rf
-from algorithms.REINFORCE import REINFORCE
-from core import interaction
+from mi6.algorithms import VPG
+from mi6.algorithms import REINFORCE as rf
+from mi6.algorithms.REINFORCE import REINFORCE
+from mi6.core import interaction
 
 
 
