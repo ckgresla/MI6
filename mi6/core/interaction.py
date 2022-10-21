@@ -8,7 +8,7 @@ print("Interaction Module imported") #testing the module dir struct (we want non
 # Reference- https://www.gymlibrary.dev/api/spaces (need write logic to get proper dims for all relevant Spaces)
 import gym
 
-env = gym.make("Pendulum-v0")
+#env = gym.make("Pendulum-v1")
 env = gym.make("CartPole-v1")
 
 obs = env.observation_space.shape

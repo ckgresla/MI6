@@ -33,20 +33,22 @@ class VPG():
     - policy_net: custom class, instantiated in driver function below
     - value_net: custom class, instantiated in driver function below
    """
-    def __init__(self, policy_net=None, value_net=None):
+    def __init__(self):
         super(VPG, self).__init__()
 
         # Instantiation Checks
-        assert policy_net != None, "Policy Network is None, please specify your Policy Net for VPG"
-        assert value_net != None, "Value Network is None, please specify your Value Net for VPG"
+        #assert policy_net != None, "Policy Network is None, please specify your Policy Net for VPG"
+        #assert value_net != None, "Value Network is None, please specify your Value Net for VPG"
 
         # Algorithm-Environment Info (flags to check if the environment [action, observation] is compatible with the method)
         self.continuous_ok = True
         self.discrete_ok = True
 
         # Network Estimators
-        self.pi = policy_net
-        self.vf = value_net
+        #self.pi = policy_net
+        #self.vf = value_net
+        self.pi = PolicyNetwork()
+        self.vf = ValueNetwork()
 
         # Data Buffer for Episodes
         self.data_keys = ["rewards", "action_probs", "vf_estimate", "normalized_rewards"]

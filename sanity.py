@@ -3,8 +3,9 @@
 import torch
 
 from mi6.core.tests import * 
-from mi6.algorithms.REINFORCE import *
+from mi6.algorithms.REINFORCE import REINFORCE as algorithm
+#from mi6.algorithms.VPG import VPG as algorithm #let's nuke these and return to a better implementation later, w consistent agent objects
 
 
-cartpole(REINFORCE, render=True)
+cartpole(algorithm, render=True)
 

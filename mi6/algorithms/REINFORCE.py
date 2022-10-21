@@ -7,6 +7,7 @@ import torch.optim as optim
 from torch.distributions import Categorical
 
 from mi6.core import interaction
+from mi6.core.reports import *
 
 
 
@@ -51,6 +52,7 @@ class REINFORCE(nn.Module):
             # Need figure out how do nice assemblies of network
             for specification in network_architecture:
                 self.specificiation = network_architecture[specification]
+        cp("REINFORCE Agent Online", color="green")
 
     # Forward Pass (given observation, matmul & activate through the network)
     def forward(self, x):
@@ -89,7 +91,8 @@ class REINFORCE(nn.Module):
             loss = -torch.log(prob_t) * discounted_reward #Estimated Gradient (for the timestep in question) = -logprobs * discounted_reward
             loss.backward() #add gradients to each weight in network, parameter update happens in batch, after reward_gradient for the whole Episode is calculated 
 
-    def parameter_update(self):
+#    def parameter_update(self):
+    def train(self):
         """
         Update the Policy Network parameters:
           1. Clear out previous Gradient Values (associated with current network parameters after prev step)
@@ -103,35 +106,21 @@ class REINFORCE(nn.Module):
         self.reset_data() #clear out data buffer for next Episode
 
 
-
-
-# this function needs to be moved into the `reports` util in the "core" dir
-def print_info(n_episodes, print_interval, score=0):
-    """
-    standardized string for printing training information (handle when to log/print logic in main script)
-    how incorporate different metrics here?
-    """
-    avg_score = f"{score/print_interval:.2f}"
-    print(f"Episode {n_episodes: ^{10}}", end="    ")
-    # cp(f"Avg Score {avg_score: ^{10}}", color="red") #need import color print from the "core.reports" module
-    print(f"Avg Score {avg_score: ^{10}}")
-    return
-
-# implement here for now, potentially move into interaction later (if feels better there)
-def sd_sampler(action_logits):
-    """
-    Stochastic Discrete Action Sample Wrapper
-    - Samples Actions & corresponding Probability from the PyTorch Categorical/Multinomial Distribution- https://pytorch.org/docs/stable/distributions.html#distribution
-
-    input is the RAW logits from the output of the network (computes probabilities with Softmax under the hood)
-        return is the; int for the action sampled & the Probability associated with that action
-    """
-    probs = torch.nn.functional.softmax(action_logits, dim=0) #convert Network outputted logits into Probabilties
-    action_distribution = Categorical(probs=probs) #instantiate distribution with action probabilities (not logits, although COULD do that too)
-    action = action_distribution.sample() #returns an int for the sampled action
-    action_prob = probs[action] #likelihood of making this action as per the policy
-
-    return action.item(), action_prob
+    # implement here for now, potentially move into interaction later (if feels better there)
+    def sd_sampler(self, action_logits):
+        """
+        Stochastic Discrete Action Sample Wrapper
+        - Samples Actions & corresponding Probability from the PyTorch Categorical/Multinomial Distribution- https://pytorch.org/docs/stable/distributions.html#distribution
+    
+        input is the RAW logits from the output of the network (computes probabilities with Softmax under the hood)
+            return is the; int for the action sampled & the Probability associated with that action
+        """
+        probs = torch.nn.functional.softmax(action_logits, dim=0) #convert Network outputted logits into Probabilties
+        action_distribution = Categorical(probs=probs) #instantiate distribution with action probabilities (not logits, although COULD do that too)
+        action = action_distribution.sample() #returns an int for the sampled action
+        action_prob = probs[action] #likelihood of making this action as per the policy
+    
+        return action.item(), action_prob
 
 
 #taken from VPG
@@ -143,54 +132,8 @@ def save_agent(epoch, policy_weights, avg_reward):
         "avg_reward" : avg_reward,
     }, save_path)
 
-# Run Algorithm on Cartpole as Example
-def cartpole_test(num_episodes=1000):
-    import gym
-
-    env = gym.make('CartPole-v1')
-    pi = REINFORCE(4, 2, learning_rate=7e-4, gamma=0.95)
-
-    score = 0.0
-    #print_interval = 20
-    print_interval = 10
 
 
-    for n_epi in range(num_episodes):
-        s = env.reset()
-        done = False
 
-        while not done: # CartPole-v1 forced to terminates at 500 step.
-            #env.render() #human viz of training process
-            
-            # Give Policy Observation, Get the Sampled Action -- ORIGINAL VERSION
-            # prob = pi(torch.from_numpy(s).float())
-            # m = Categorical(prob) #input action probabilities into Categorical Dist, sample discrete action 
-            # a = m.sample() #sample discrete action, i.e an int tensor 
-
-            # print("probs:", prob)
-            # print("action:", a)
-            # print("actionitem:", a.item())
-            # s_prime, r, done, info = env.step(a.item())
-            # pi.append_data((r,prob[a]))
-
-            # Get Action from Logits -- CKG Updated
-            obs = torch.from_numpy(s).float() #convert state given from Env into torch vec for passing to network (observation)
-            logits = pi(obs) #forward pass, computes action logits
-            action, prob_a = sd_sampler(logits) #sample action (int) and get corresponding probabilties
-
-            s_prime, r, done, info = env.step(action) #interact w environment and get next state info
-            pi.append_data((r, prob_a)) #append the (reward, action_probability) tuple to the Policy Data Buffer
-            s = s_prime #next/new state is now the current state
-            score += r #episode reward
-
-        pi.parameter_update() #after termination of episode, update the policy
-
-        # Print Info per N Trajectories (episodes of running a specific Policy)
-        if n_epi%print_interval==0 and n_epi!=0:
-            # print("Episode {}\tavg_score {}".format(n_epi, score/print_interval)) #original print statement
-            print_info(n_epi, print_interval, score)
-            save_agent(n_epi, pi.state_dict(), score/print_interval)
-            score = 0.0
-    env.close()
-
+# End of Class
 
