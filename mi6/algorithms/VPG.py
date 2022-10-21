@@ -323,6 +323,5 @@ def cartpole_test(num_epochs=10000, num_episodes=50):
     env.close()
 
 
-# Sample Run of Algorithm
-if __name__ == '__main__':
-    cartpole_test()
+# End of Class
+

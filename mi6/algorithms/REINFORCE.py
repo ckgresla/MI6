@@ -6,6 +6,7 @@ import torch.nn.functional as F
 import torch.optim as optim
 from torch.distributions import Categorical
 
+from mi6.core import interaction
 
 
 
@@ -143,7 +144,7 @@ def save_agent(epoch, policy_weights, avg_reward):
     }, save_path)
 
 # Run Algorithm on Cartpole as Example
-def cartpole_test(num_episodes=1000000):
+def cartpole_test(num_episodes=1000):
     import gym
 
     env = gym.make('CartPole-v1')
@@ -151,7 +152,7 @@ def cartpole_test(num_episodes=1000000):
 
     score = 0.0
     #print_interval = 20
-    print_interval = 1000
+    print_interval = 10
 
 
     for n_epi in range(num_episodes):
@@ -192,8 +193,4 @@ def cartpole_test(num_episodes=1000000):
             score = 0.0
     env.close()
 
-
-# Sample Run of Algorithm
-if __name__ == '__main__':
-    cartpole_test()
 
