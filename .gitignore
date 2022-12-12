@@ -131,3 +131,6 @@ dmypy.json
 
 # Vim Stuff
 *.swp
+
+# CKG Added 
+.DS_Store
